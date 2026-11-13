@@ -2,6 +2,8 @@
 
 A low-level, DNS stub resolver written in pure C from scratch. This project implements manual wire-format packet construction, sequential length-prefixed label parsing, and raw socket communication without relying on high-level networking abstractions.
 
+> 💡 **Documentation Note:** Please check the `/docs` folder at the start of your review for supplementary hand written notes and diagrams.
+
 ## Example Output
 
 When running the compiled binary against a live domain (e.g., `www.krunker.io`), the custom parser handles the binary response packet, strips out the headers and question sections, and extracts the resulting IP addresses from the resource records:
