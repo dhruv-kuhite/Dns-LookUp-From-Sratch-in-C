@@ -1,17 +1,19 @@
-#include "DnsResolver.h"
+#include "DnsLookup.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 
-char DnsString[256] = "www.google.com";
+char DnsString[257] = "www.google.com";
 
 void setDnsReqHeader() {
 
-  memset(&DnsReqHeader, 0, sizeof(Dns_header_Req));
+  memset(&DnsReqHeader, 0, sizeof(Dns_header_));
   DnsReqHeader.Id = htons(50);
-  DnsReqHeader.RD = htons(1);
+  DnsReqHeader.Flags |= 1 << 8; // set RD to 1
+  DnsReqHeader.Flags = htons(DnsReqHeader.Flags);
   DnsReqHeader.Que_Count = htons(1);
 }
 
@@ -37,7 +39,7 @@ void FormatDnsLink() {
     }
     count++;
   }
-  printf("\n");
+
   req_question[Qindex] = '\0';
 
   req_question_size = Qindex;
@@ -55,10 +57,11 @@ void CombineToMakeDnsReq() {
   FormatDnsLink();
   SetQueryStruct();
   PacketSize = 0;
-  memset(DnsPacket, 0, sizeof(DnsPacket));
-  memcpy(&DnsPacket[PacketSize], &DnsReqHeader, sizeof(Dns_header_Req));
 
-  PacketSize += sizeof(Dns_header_Req);
+  memset(DnsPacket, 0, sizeof(DnsPacket));
+  memcpy(&DnsPacket[PacketSize], &DnsReqHeader, sizeof(Dns_header_));
+
+  PacketSize += sizeof(Dns_header_);
   memcpy(&DnsPacket[PacketSize], req_question, strlen(req_question));
   PacketSize +=
       strlen(req_question) + 1; // end letter  should be 00 for it to work
@@ -97,51 +100,46 @@ void SendDnsPacket(int socketFd) {
 void RecivingDnsPacket(int socketFd) {
   char buffer[1024];
   int sizeReciveTo = sizeof(ReciveTo);
+  printf("Reciving..\n");
   int sizebuff = recvfrom(socketFd, buffer, sizeof(buffer), 0,
                           (struct sockaddr *)&ReciveTo, &sizeReciveTo);
 
-  int n = 0;
+  int index = 0;
+  memcpy(&Recv_Header, &buffer[index], sizeof(Recv_Header));
+  index += sizeof(Recv_Header);
+  Recv_Header.Ans_Count = ntohs(Recv_Header.Ans_Count);
+  memcpy(&recv_question, &buffer[index], req_question_size);
+  index += req_question_size + 1;
+  memcpy(&RecvQueryStruct, &buffer[index], sizeof(QueryStruct));
+  index += sizeof(QueryStruct);
 
-  memcpy(&DnsHeaderRecv, &buffer[n], sizeof(DnsHeaderRecv));
-  n += sizeof(DnsHeaderRecv);
+  Recv_ans_section =
+      (Ans_Section *)malloc(sizeof(Ans_Section) * Recv_Header.Ans_Count);
 
-  memcpy(recv_question, &buffer[n], strlen(req_question));
-  n += strlen(req_question)+1; // to start from after null
+  for (int i = 0; i < Recv_Header.Ans_Count; i++) {
+    index += 10; // for skiping 10 bytes check DnsResolver.h line 40
+    memcpy(&Recv_ans_section[i].RdLength, &buffer[index],
+           sizeof(Recv_ans_section[i].RdLength));
+    index += sizeof(Recv_ans_section[i].RdLength);
+    Recv_ans_section[i].RdLength = ntohs(Recv_ans_section[i].RdLength);
 
-  memcpy(&RecvQueryStruct, &buffer[n], sizeof(RecvQueryStruct));
-  n += sizeof(RecvQueryStruct);
-
-    memcpy(&recv_name, &buffer[n], sizeof(recv_name));
-  n += sizeof(recv_name);
-
-      memcpy(&recv_type, &buffer[n], sizeof(recv_type));
-  n += sizeof(recv_type);
-
-        memcpy(&recv_class, &buffer[n], sizeof(recv_class));
-  n += sizeof(recv_class);
-
-  memcpy(&recv_ttl, &buffer[n], sizeof(recv_ttl));
-  n += sizeof(recv_ttl);
-
-  memcpy(&recv_RDLength, &buffer[n], sizeof(recv_RDLength));
-  n += sizeof(recv_RDLength);
-
-  // convert Ans Count to little endian as we are on
-  // little endian machine
-  DnsHeaderRecv.Ans_Count = ntohs(DnsHeaderRecv.Ans_Count);
-
-  memcpy(&recv_ans, &buffer[n], sizeof(int));
-
-  size_recv_ans = DnsHeaderRecv.Ans_Count;
-
-  DnsHeaderRecv.Id = ntohs(DnsHeaderRecv.Id);
+    Recv_ans_section[i].Rdata =
+        (unsigned char *)malloc(Recv_ans_section[i].RdLength);
+    memcpy(Recv_ans_section[i].Rdata, &buffer[index],
+           Recv_ans_section[i].RdLength);
+    index += Recv_ans_section[i].RdLength;
+  }
 }
 
 int CheckForSuccess() {
 
-  switch (DnsHeaderRecv.Rcode) {
+  recv_Rcode = ntohs(Recv_Header.Flags) & 15;
+
+  printf("rcode : %d\n", recv_Rcode);
+  switch (recv_Rcode) {
 
   case 0:
+    printf("Success :)\n");
     return 0;
     break;
 
@@ -176,18 +174,27 @@ int CheckForSuccess() {
 
 void printTheIpAddress() {
 
-  printf("Dns Lookup Succcessss : \n");
-
-  for (int i = 0; i < size_recv_ans; i++) {
-    char buffer[16];
-
-    inet_ntop(AF_INET, &recv_ans[i], buffer, sizeof(buffer));
-    printf("%d)Ip  : %s\n", i + 1, buffer);
+  char recv_ip[100];
+  for (int i = 0; i < Recv_Header.Ans_Count; i++) {
+    memset(recv_ip, 0, sizeof(recv_ip));
+    inet_ntop(AF_INET, Recv_ans_section[i].Rdata, recv_ip, sizeof(recv_ip));
+    printf("%d) IP : %s\n", i + 1, recv_ip);
   }
+}
+
+void FreeEveryThing() {
+
+  for (int i = 0; i < Recv_Header.Ans_Count; i++) {
+    free(Recv_ans_section[i].Rdata);
+  }
+
+  free(Recv_ans_section);
 }
 
 int main() {
 
+  printf("Enter the Dns Name (Ex : www.example.com): ");
+  scanf("%s", DnsString);
   int socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
   CombineToMakeDnsReq();
@@ -198,5 +205,6 @@ int main() {
     return -1;
   }
   printTheIpAddress();
+  FreeEveryThing();
   return 0;
 }
