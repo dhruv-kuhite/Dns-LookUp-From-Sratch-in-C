@@ -7,7 +7,7 @@ A low-level, DNS stub resolver written in pure C from scratch. This project impl
 When running the compiled binary against a live domain (e.g., `www.krunker.io`), the custom parser handles the binary response packet, strips out the headers and question sections, and extracts the resulting IP addresses from the resource records:
 
 ```text
-Enter the Dns Name (Ex : [www.example.com](https://www.example.com)): www.krunker.io
+Enter the Dns Name (Ex : www.example.com): www.krunker.io
 Reciving..
 rcode : 0
 Success :)
