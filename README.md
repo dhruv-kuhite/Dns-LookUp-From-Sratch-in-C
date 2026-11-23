@@ -29,7 +29,6 @@ Success :)
 Unlike standard applications that rely on operating system wrappers like `getaddrinfo()`, this resolver operates directly at the transport layer:
 1. **Query Construction:** Manages binary bit-shifting and struct packing to construct standard DNS query headers and question blocks.
 2. **Transport Layer:** Communicates with upstream recursive resolvers over standard UDP sockets on port 53.
-3. **Label Traversal:** Iterates through sequential length bytes (e.g., parsing `[3]w-w-w[6]g-o-o-g-l-e[3]c-o-m[0]` into a readable string format while avoiding buffer overflows.
 
 ---
 
