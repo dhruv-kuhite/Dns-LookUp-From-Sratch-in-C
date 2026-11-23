@@ -29,7 +29,7 @@ Success :)
 Unlike standard applications that rely on operating system wrappers like `getaddrinfo()`, this resolver operates directly at the transport layer:
 1. **Query Construction:** Manages binary bit-shifting and struct packing to construct standard DNS query headers and question blocks.
 2. **Transport Layer:** Communicates with upstream recursive resolvers over standard UDP sockets on port 53.
-
+3. **Answer Section Extraction:** Navigates directly to the answer section of the response packet to extract the resolved IP addresses (`A` records).
 ---
 
 ## Getting Started
